@@ -9,12 +9,13 @@
 #define WWW_ROOT "./www"
     class Server
    {
-       public:
-        bool Start(int port)//服务器开始跑，其实这个start就是阻塞的，调用后一直监听，>
+       
+        public:
+        bool Start(int port)//服务器开始跑，其实这个start就是阻塞的，调用后一直监听，等待客户端
        {
          
           bool ret;
-          ret=_lst_sock.SocketInit(port);//创建一个套接字，需要一个端口
+          ret=_lst_sock.SocketInit(port);//创建一个套接字，需要一个端口，绑定地址信息，开始监听
          if(ret==false)
          {
            return false;
@@ -41,10 +42,10 @@
          {
            
               
-          std::vector<TcpSocket> list;
-           ret=_epoll.Wait(list);//开始等待，获取到信息
+          std::vector<TcpSocket> list;//定义一个列表
+           ret=_epoll.Wait(list);//开始等待，获取到信息，获取已完成列表
 
-            if(ret==false)//监控失败
+            if(ret==false)//监控失败，超时或者描述符出错
            {
              continue;
            }
@@ -54,7 +55,7 @@
              if(list[i].GetFd()==_lst_sock.GetFd())//监听套结字
              {
                 TcpSocket cli_sock;
-                ret=_lst_sock.Accept(cli_sock);
+                ret=_lst_sock.Accept(cli_sock);//获取
                 if(ret==false)
                 {
                   continue;//重新获取
@@ -63,32 +64,34 @@
                 _epoll.Add(cli_sock);
   
              }
-             else//普通的
+             else//普通的，有事件到来
              {
-               ThreadTask tt(list[i].GetFd(),ThreadHandler);//组织一个任务
+               ThreadTask tt(list[i].GetFd(),ThreadHandler);//组织一个任务？
 	           
-               _pool.TaskPush(tt);//入队操作  
+               _pool.TaskPush(tt);//入队操作  ？
                _epoll.Del(list[i]);//移除掉
              }
            }
             
   
          }
-         _lst_sock.Close();
+         _lst_sock.Close();//完毕
          return true;
        }
        public:
-          static void ThreadHandler(int sockfd)//除掉this指针用static
+          static void ThreadHandler(int sockfd)//除掉this指针用static，因为对方只有一个参数即笔记里的那个函数指针  ？
           {
             TcpSocket sock;
             sock.SetFd(sockfd);
         
-            //从clisock接受请求数据，进行解析
-            HttpRequest req;//接受数据，保存请求的所有信息，解析结果放到req
-            HttpResponse rsp;//实例化一个响应对象
-            int status=req.RequestParse(sock);//需要接受信息
             
-            if(status!=200)//200
+            HttpRequest req;//接受数据，保存请求的所有信息，解析结果放到req；解析请求，将所有的正文以及请求头信息放到req  
+            HttpResponse rsp;//实例化一个响应对象，包含所有响应信息
+            
+            int status=req.RequestParse(sock);//需要接受信息，返回状态码  ？
+            //从sock接受请求数据，进行解析
+            
+            if(status!=200)//
             {
               //解析失败则直接响应错误
               rsp._status=status;
@@ -97,15 +100,20 @@
               return;
             }      
              std::cout<<"----\n";            
-           //根据请求，进行处理，将处理结果填充到rsp中
+          
             
             HttpProcess(req,rsp);//通过req填充rsp
+            ////根据请求，进行处理，将处理结果填充到rsp
+            
+            rsp.NormalProcess(sock);    ？
+           
             //将处理结果（响应结果）反映给客户端
-            rsp.NormalProcess(sock);
-            //当前采用短连接，直接处理完毕后关闭套接字
             sock.Close();
+            //当前采用短连接，直接处理完毕后关闭套接字
             return;
           }
+       
+       
        static bool HttpProcess(HttpRequest&req,HttpResponse&rsp)
        {
          //若请求是一个POST请求--则多进程CGI进行处理
